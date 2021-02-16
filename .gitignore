@@ -1,0 +1,5 @@
+.idea
+venv
+chat_log.txt
+token.txt
+*.pyc
