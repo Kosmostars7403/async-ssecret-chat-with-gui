@@ -9,7 +9,6 @@ logger = logging.getLogger('chat_tools')
 
 
 async def submit_message(writer, message):
-    logger.debug(f'Sending message: {message}')
     message = message.replace('\n', '')
     writer.write(message.encode(encoding='utf-8') + b'\n\n')
     await writer.drain()
@@ -27,8 +26,7 @@ async def connect_to_chat(host, port, queue, state_indicator):
         queue.put_nowait(state_indicator.INITIATED)
         try:
             reader, writer = await asyncio.open_connection(host, port)
-            server_start_message = await read_message(reader)
-            logger.debug(server_start_message)
+            await read_message(reader)  # server start message
 
             queue.put_nowait(state_indicator.ESTABLISHED)
             yield reader, writer
