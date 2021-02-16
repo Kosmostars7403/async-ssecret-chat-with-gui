@@ -7,6 +7,7 @@ import time
 
 import aiofiles
 import configargparse
+from async_timeout import timeout
 
 import gui
 from auth_tools import authorize, InvalidToken, check_token_existence
@@ -78,9 +79,14 @@ async def send_msgs(host, port, queues):
 
 async def watch_for_connection(queue):
     while True:
-        log_message = await queue.get()
-        timestamp = int(time.time())
-        logger.debug(f'[{timestamp}] {log_message}')
+        try:
+            async with timeout(1) as cm:
+                log_message = await queue.get()
+                timestamp = int(time.time())
+                logger.debug(f'[{timestamp}] {log_message}')
+        except asyncio.TimeoutError:
+            if cm.expired:
+                logger.debug(f'[{timestamp}] 1s timeout is elapsed')
 
 
 async def main(options, queues):
