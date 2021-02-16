@@ -1,19 +1,15 @@
 import asyncio
 import os
 from datetime import datetime
+from tkinter import messagebox
 
 import aiofiles
 import configargparse
 
 import gui
-from auth_tools import authorize
+from auth_tools import authorize, InvalidToken, check_token_existence
 from chat_tools import connect_to_chat, read_message, submit_message
-
-
-MINECHAT_HOST = 'minechat.dvmn.org'
-SENDING_PORT = 5050
-LISTENING_PORT = 5000
-CHAT_LOG_PATH = 'chat_log.txt'
+from constants import *
 
 
 async def restore_chat_history(queue):
@@ -30,45 +26,54 @@ async def save_msgs(filepath, queue):
             await file.write(message)
 
 
-async def read_msgs(host, port, msgs_queue, history_queue):
-    await restore_chat_history(msgs_queue)
-    async with connect_to_chat(host, port) as (reader, writer):
+async def read_msgs(host, port, queues):
+    await restore_chat_history(queues[MESSAGES_QUEUE])
+
+    async with connect_to_chat(
+            host, port,
+            queues[STATUS_UPDATE_QUEUE],
+            gui.ReadConnectionStateChanged
+    ) as (reader, writer):
+
         while True:
             chat_message = await asyncio.wait_for(read_message(reader), 10)
             message_received_time = datetime.now().strftime('%d.%m.%y %H:%M:%S')
             chat_message = f'[{message_received_time}] {chat_message}'
-            msgs_queue.put_nowait(chat_message.replace('\n', ''))  # replace for ignore empty strings
-            history_queue.put_nowait(chat_message)
+
+            queues[MESSAGES_QUEUE].put_nowait(chat_message.replace('\n', ''))  # replace for ignore empty strings
+            queues[HISTORY_QUEUE].put_nowait(chat_message)
 
 
-async def send_msgs(writer, queue):
-    while True:
-        msg = await queue.get()
-        await submit_message(writer, msg)
+async def send_msgs(host, port, queues):
+    async with connect_to_chat(
+            host, port,
+            queues[STATUS_UPDATE_QUEUE],
+            gui.SendingConnectionStateChanged
+    ) as (reader, writer):
+
+        try:
+            nickname = await authorize(writer, reader, options.minechat_token)
+            event = gui.NicknameReceived(nickname)
+            queues[STATUS_UPDATE_QUEUE].put_nowait(event)
+        except InvalidToken:
+            messagebox.showinfo(
+                "Неверный токен",
+                "Проверьте токен, сервер его не узнал. Доступно только чтение чата."
+            )
+            return
+        while True:
+            msg = await queues[SENDING_QUEUE].get()
+            await submit_message(writer, msg)
 
 
-async def main(options):
-    async with connect_to_chat(options.host, SENDING_PORT) as (reader, writer):
-        messages_queue = asyncio.Queue()
-        sending_queue = asyncio.Queue()
-        status_updates_queue = asyncio.Queue()
-        history_queue = asyncio.Queue()
+async def main(options, queues):
 
-        await authorize(writer, reader, options.minechat_token)
-
-        await asyncio.gather(
-            gui.draw(messages_queue, sending_queue, status_updates_queue),
-            read_msgs(options.host, options.port, messages_queue, history_queue),
-            save_msgs(options.history, history_queue),
-            send_msgs(writer, sending_queue)
-        )
-
-
-def check_token_existence():
-    if os.path.exists('token.txt'):
-        with open('token.txt', 'r') as file:
-            return file.read()
-    return None
+    await asyncio.gather(
+        gui.draw(queues[MESSAGES_QUEUE], queues[SENDING_QUEUE], queues[STATUS_UPDATE_QUEUE]),
+        read_msgs(options.host, options.port, queues),
+        save_msgs(options.history, queues[HISTORY_QUEUE]),
+        send_msgs(options.host, SENDING_PORT, queues)
+    )
 
 
 def get_application_options():
@@ -85,7 +90,14 @@ def get_application_options():
 
 
 if __name__ == '__main__':
+    queues = {
+        STATUS_UPDATE_QUEUE: asyncio.Queue(),
+        MESSAGES_QUEUE: asyncio.Queue(),
+        SENDING_QUEUE: asyncio.Queue(),
+        HISTORY_QUEUE: asyncio.Queue()
+    }
+
     options = get_application_options()
     loop = asyncio.get_event_loop()
 
-    loop.run_until_complete(main(options))
+    loop.run_until_complete(main(options, queues))

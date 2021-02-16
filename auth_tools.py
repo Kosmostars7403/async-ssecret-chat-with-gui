@@ -10,6 +10,10 @@ from chat_tools import read_message, submit_message
 logger = logging.getLogger('sender')
 
 
+class InvalidToken(Exception):
+    pass
+
+
 def check_token_existence():
     if os.path.exists('token.txt'):
         with open('token.txt', 'r') as file:
@@ -39,13 +43,13 @@ async def register(writer, reader, username):
 async def authorize(writer, reader, token):
     if not token:
         logger.error('You are not logged in. Log in or register.')
-        return None
+        raise InvalidToken
     await asyncio.wait_for(submit_message(writer, token), 10)
     auth_response = await read_message(reader)
 
     auth_response = json.loads(auth_response)
     if not auth_response:
         logger.error('Wrong token. Try again or register a new username.')
-        return None
+        raise InvalidToken
     logger.error(f'Successfully authorized with nickname {auth_response["nickname"]}')
     return auth_response['nickname']

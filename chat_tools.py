@@ -21,14 +21,16 @@ async def read_message(reader):
 
 
 @asynccontextmanager
-async def connect_to_chat(host, port):
+async def connect_to_chat(host, port, queue, state_indicator):
     reader = writer = None
     while True:
+        queue.put_nowait(state_indicator.INITIATED)
         try:
             reader, writer = await asyncio.open_connection(host, port)
             server_start_message = await read_message(reader)
             logger.debug(server_start_message)
 
+            queue.put_nowait(state_indicator.ESTABLISHED)
             yield reader, writer
             break
         except asyncio.TimeoutError:
@@ -42,4 +44,5 @@ async def connect_to_chat(host, port):
             if writer:
                 writer.close()
                 await writer.wait_closed()
+            queue.put_nowait(state_indicator.CLOSED)
             logger.debug('Connection closed.')
