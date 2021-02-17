@@ -141,9 +141,11 @@ if __name__ == '__main__':
         HISTORY_QUEUE: asyncio.Queue(),
         WATCHDOG_QUEUE: asyncio.Queue()
     }
+    try:
+        logging.basicConfig(level=logging.DEBUG)
+        options = get_application_options()
+        loop = asyncio.get_event_loop()
 
-    logging.basicConfig(level=logging.DEBUG)
-    options = get_application_options()
-    loop = asyncio.get_event_loop()
-
-    loop.run_until_complete(main(options, queues))
+        loop.run_until_complete(main(options, queues))
+    except (KeyboardInterrupt, gui.TkAppClosed):
+        pass
