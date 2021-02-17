@@ -1,9 +1,10 @@
 import asyncio
 import logging
 from contextlib import asynccontextmanager
+import socket
 
+from async_timeout import timeout
 
-RECONNECT_DELAY = 5
 
 logger = logging.getLogger('chat_tools')
 
@@ -22,25 +23,23 @@ async def read_message(reader):
 @asynccontextmanager
 async def connect_to_chat(host, port, queue, state_indicator):
     reader = writer = None
-    while True:
-        queue.put_nowait(state_indicator.INITIATED)
+    queue.put_nowait(state_indicator.INITIATED)
+    try:
         try:
-            reader, writer = await asyncio.open_connection(host, port)
-            await read_message(reader)  # server start message
+            async with timeout(1):
+                reader, writer = await asyncio.open_connection(host, port)
+                queue.put_nowait(state_indicator.ESTABLISHED)
+        except (asyncio.TimeoutError, socket.gaierror, ConnectionRefusedError):
+            logger.error('Error with server connection!')
+            raise ConnectionError
 
-            queue.put_nowait(state_indicator.ESTABLISHED)
+        try:
+            await read_message(reader)  # server start message
             yield reader, writer
-            break
-        except asyncio.TimeoutError:
-            logger.error('Timeout error with server connection!')
-            raise
-        except ConnectionResetError:
-            logger.error(f'Connection failed, start new attempt in {RECONNECT_DELAY}')
-            await asyncio.sleep(RECONNECT_DELAY)
-            continue
         finally:
             if writer:
                 writer.close()
                 await writer.wait_closed()
-            queue.put_nowait(state_indicator.CLOSED)
-            logger.debug('Connection closed.')
+    finally:
+        queue.put_nowait(state_indicator.CLOSED)
+        logger.debug('Connection closed.')

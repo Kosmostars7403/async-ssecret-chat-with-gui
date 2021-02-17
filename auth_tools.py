@@ -51,5 +51,5 @@ async def authorize(writer, reader, token):
     if not auth_response:
         logger.error('Wrong token. Try again or register a new username.')
         raise InvalidToken
-    logger.error(f'Successfully authorized with nickname {auth_response["nickname"]}')
+    logger.debug(f'Successfully authorized with nickname {auth_response["nickname"]}')
     return auth_response['nickname']
