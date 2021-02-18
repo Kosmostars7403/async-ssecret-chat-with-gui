@@ -16,6 +16,9 @@ from chat_tools import connect_to_chat, read_message, submit_message
 from constants import *
 from ping_connection import ping, pong
 
+CONNECTION_BREAK_DELAY = 2
+
+
 logger = logging.getLogger('watchdog_logger')
 
 
@@ -89,13 +92,13 @@ async def send_msgs(host, port, queues):
 async def watch_for_connection(queue):
     while True:
         try:
-            async with timeout(2) as cm:
+            async with timeout(CONNECTION_BREAK_DELAY) as cm:
                 log_message = await queue.get()
                 timestamp = int(time.time())
                 logger.debug(f'[{timestamp}] Connection is alive. {log_message}')
         except asyncio.TimeoutError:
             if cm.expired:
-                logger.debug(f'[{timestamp}] 1s timeout is elapsed')
+                logger.debug(f'[{timestamp}] {CONNECTION_BREAK_DELAY}s timeout is elapsed')
             raise ConnectionError
 
 
@@ -126,8 +129,7 @@ def get_application_options():
     parser.add('--read_port', help='Port for connection.', default=MINECHAT_READ_PORT, env_var='MINECHAT_WRITE_PORT')
     parser.add('--write_port', help='Port for connection.', default=MINECHAT_WRITE_PORT, env_var='MINECHAT_READ_PORT')
     parser.add('--history', help='Path for history file.', default=CHAT_LOG_PATH, env_var='CHAT_LOG_PATH')
-    auth_args = parser.add_mutually_exclusive_group()
-    auth_args.add('--minechat_token', help='Authorization token.', default=check_token_existence(), env_var='MINECHAT_TOKEN')
+    parser.add('--minechat_token', help='Authorization token.', default=check_token_existence(), env_var='MINECHAT_TOKEN')
 
     return parser.parse_args()
 
