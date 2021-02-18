@@ -128,7 +128,6 @@ def get_application_options():
     parser.add('--history', help='Path for history file.', default=CHAT_LOG_PATH, env_var='CHAT_LOG_PATH')
     auth_args = parser.add_mutually_exclusive_group()
     auth_args.add('--minechat_token', help='Authorization token.', default=check_token_existence(), env_var='MINECHAT_TOKEN')
-    auth_args.add('--username', help='Choose username for registration.')
 
     return parser.parse_args()
 
